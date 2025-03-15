@@ -1,0 +1,43 @@
+name: Flutter CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.1'
+          channel: 'stable'
+
+      - name: Install Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Clean project
+        run: flutter clean
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Run Flutter Tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk
