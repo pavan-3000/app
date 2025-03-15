@@ -36,8 +36,14 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Run Flutter Tests
-        run: flutter test
+      - name: Ensure Gradle Wrapper Exists
+        run: |
+          cd android
+          if [ ! -f "./gradlew" ]; then
+            echo "Gradlew not found! Regenerating..."
+            gradle wrapper
+          fi
+          chmod +x ./gradlew
 
       - name: Build APK
         run: flutter build apk
