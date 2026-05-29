@@ -5,9 +5,9 @@ WORKDIR /app
 COPY package.json ./
 COPY package-lock.json ./
 
-RUN npm install && npm run build
-
 COPY . .
+
+RUN npm install && npm run build
 
 FROM node:18-alpine
 
