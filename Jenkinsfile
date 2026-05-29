@@ -36,14 +36,6 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
-            steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
-                    sh 'npm install' // Assuming Node.js project, adjust this line according to your project's dependency manager
-                }
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
@@ -51,7 +43,7 @@ pipeline {
                         def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
-                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL}'
+                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=java'
                             }
                         } else {
                             echo 'sonar-scanner not found — configure SonarQube Scanner in Jenkins → Manage Jenkins → Tools'
@@ -71,7 +63,9 @@ pipeline {
                             if (dockerAvailable) {
                                 def daemonOk = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
                                 if (daemonOk) {
-                                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                                    retry(2) {
+                                        sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                                    }
                                     sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                                 } else {
                                     echo 'Docker CLI found but daemon not reachable — mount the socket: docker run -v /var/run/docker.sock:/var/run/docker.sock'
@@ -93,7 +87,7 @@ pipeline {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
                             def trivyOk = sh(script: 'which trivy 2>/dev/null', returnStatus: true) == 0
                             if (trivyOk) {
-                                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
+                                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
                                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             } else {
                                 echo 'Trivy not available — skipping scan'
@@ -109,31 +103,31 @@ pipeline {
         always {
             script {
                 def status = currentBuild.result ?: 'IN_PROGRESS'
-                def prompt = "Analyze this Jenkins CI/CD pipeline and give 2-3 actionable bullet points: what passed, what failed (if any), and one improvement recommendation.\n\nJob: ${env.JOB_NAME}\nBuild #${env.BUILD_NUMBER}\nBranch: ${env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'unknown'}\nStatus: ${status}"
+                def promptText = "Analyze this Jenkins CI/CD build and give 2-3 actionable bullet points: what passed, what failed (if any), and one improvement.\nJob: ${env.JOB_NAME} Build#${env.BUILD_NUMBER} Branch: ${env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'unknown'} Status: ${status}"
                 def aiDone = false
 
                 for (def credId : ['devpilot-anthropic-key', 'ANTHROPIC_API_KEY']) {
                     if (aiDone) break
                     try {
                         withCredentials([string(credentialsId: credId, variable: 'ANTHROPIC_KEY')]) {
-                            def payload = groovy.json.JsonOutput.toJson([
+                            writeFile file: '.ai-payload.json', text: groovy.json.JsonOutput.toJson([
                                 model: 'claude-haiku-4-5-20251001',
                                 max_tokens: 350,
-                                messages: [[role: 'user', content: prompt]]
+                                messages: [[role: 'user', content: promptText]]
                             ])
-                            def conn = new URL('https://api.anthropic.com/v1/messages').openConnection()
-                            conn.requestMethod = 'POST'
-                            conn.doOutput = true
-                            conn.setRequestProperty('Content-Type', 'application/json')
-                            conn.setRequestProperty('x-api-key', env.ANTHROPIC_KEY)
-                            conn.setRequestProperty('anthropic-version', '2023-06-01')
-                            conn.outputStream << payload.getBytes('UTF-8')
-                            def code = conn.responseCode
-                            def resp = code < 400 ? conn.inputStream.text : conn.errorStream.text
-                            if (code == 200) {
-                                def parsed = new groovy.json.JsonSlurper().parseText(resp)
-                                echo "\n=== Claude AI Build Analysis ===\n${parsed.content[0].text}\n================================"
-                                writeFile file: 'ai-analysis.json', text: resp
+                            def rc = sh returnStatus: true, script: '''
+                                curl -sf -X POST https://api.anthropic.com/v1/messages \
+                                  -H 'Content-Type: application/json' \
+                                  -H "x-api-key: $ANTHROPIC_KEY" \
+                                  -H 'anthropic-version: 2023-06-01' \
+                                  --max-time 30 \
+                                  -d @.ai-payload.json \
+                                  -o .ai-response.json
+                            '''
+                            if (rc == 0) {
+                                def resp = new groovy.json.JsonSlurper().parseText(readFile('.ai-response.json'))
+                                echo "\n=== Claude AI Build Analysis ===\n${resp.content[0].text}\n================================"
+                                writeFile file: 'ai-analysis.json', text: readFile('.ai-response.json')
                                 archiveArtifacts artifacts: 'ai-analysis.json', allowEmptyArchive: true
                                 aiDone = true
                             }
@@ -145,23 +139,23 @@ pipeline {
                     if (aiDone) break
                     try {
                         withCredentials([string(credentialsId: credId, variable: 'OPENAI_KEY')]) {
-                            def payload = groovy.json.JsonOutput.toJson([
+                            writeFile file: '.ai-payload.json', text: groovy.json.JsonOutput.toJson([
                                 model: 'gpt-4o-mini',
                                 max_tokens: 350,
-                                messages: [[role: 'user', content: prompt]]
+                                messages: [[role: 'user', content: promptText]]
                             ])
-                            def conn = new URL('https://api.openai.com/v1/chat/completions').openConnection()
-                            conn.requestMethod = 'POST'
-                            conn.doOutput = true
-                            conn.setRequestProperty('Content-Type', 'application/json')
-                            conn.setRequestProperty('Authorization', "Bearer ${env.OPENAI_KEY}")
-                            conn.outputStream << payload.getBytes('UTF-8')
-                            def code = conn.responseCode
-                            def resp = code < 400 ? conn.inputStream.text : conn.errorStream.text
-                            if (code == 200) {
-                                def parsed = new groovy.json.JsonSlurper().parseText(resp)
-                                echo "\n=== ChatGPT Build Analysis ===\n${parsed.choices[0].message.content}\n==============================="
-                                writeFile file: 'ai-analysis.json', text: resp
+                            def rc = sh returnStatus: true, script: '''
+                                curl -sf -X POST https://api.openai.com/v1/chat/completions \
+                                  -H 'Content-Type: application/json' \
+                                  -H "Authorization: Bearer $OPENAI_KEY" \
+                                  --max-time 30 \
+                                  -d @.ai-payload.json \
+                                  -o .ai-response.json
+                            '''
+                            if (rc == 0) {
+                                def resp = new groovy.json.JsonSlurper().parseText(readFile('.ai-response.json'))
+                                echo "\n=== ChatGPT Build Analysis ===\n${resp.choices[0].message.content}\n==============================="
+                                writeFile file: 'ai-analysis.json', text: readFile('.ai-response.json')
                                 archiveArtifacts artifacts: 'ai-analysis.json', allowEmptyArchive: true
                                 aiDone = true
                             }
