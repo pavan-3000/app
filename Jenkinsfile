@@ -22,14 +22,14 @@ pipeline {
 
                         if ! which docker 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/docker" ]; then
                             DOCKER_VERSION=24.0.7
-                            curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz 2>/dev/null || true
-                            tar -xz -C /tmp -f /tmp/docker-cli.tgz 2>/dev/null || true
-                            mv /tmp/docker/docker "$TOOLS_DIR/bin/docker" 2>/dev/null || true
-                            rm -rf /tmp/docker-cli.tgz /tmp/docker 2>/dev/null || true
+                            curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz
+                            tar -xz -C /tmp -f /tmp/docker-cli.tgz
+                            mv /tmp/docker/docker "$TOOLS_DIR/bin/docker"
+                            rm -rf /tmp/docker-cli.tgz /tmp/docker
                         fi
 
                         if ! which trivy 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/trivy" ]; then
-                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin" 2>/dev/null || true
+                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin"
                         fi
                     '''
                 }
@@ -43,7 +43,7 @@ pipeline {
                         def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
-                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=auto'
+                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=java'
                             }
                         } else {
                             echo 'sonar-scanner not found — configure SonarQube Scanner in Jenkins → Manage Jenkins → Tools'
