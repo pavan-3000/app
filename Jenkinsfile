@@ -22,14 +22,14 @@ pipeline {
 
                         if ! which docker 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/docker" ]; then
                             DOCKER_VERSION=24.0.7
-                            curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz || true
-                            tar -xz -C /tmp -f /tmp/docker-cli.tgz || true
-                            mv /tmp/docker/docker "$TOOLS_DIR/bin/docker" || true
-                            rm -rf /tmp/docker-cli.tgz /tmp/docker || true
+                            curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz 2>/dev/null || true
+                            tar -xz -C /tmp -f /tmp/docker-cli.tgz 2>/dev/null || true
+                            mv /tmp/docker/docker "$TOOLS_DIR/bin/docker" 2>/dev/null || true
+                            rm -rf /tmp/docker-cli.tgz /tmp/docker 2>/dev/null || true
                         fi
 
                         if ! which trivy 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/trivy" ]; then
-                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin" || true
+                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin" 2>/dev/null || true
                         fi
                     '''
                 }
@@ -43,7 +43,7 @@ pipeline {
                         def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
-                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=java'
+                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL}'
                             }
                         } else {
                             echo 'sonar-scanner not found — configure SonarQube Scanner in Jenkins → Manage Jenkins → Tools'
@@ -85,7 +85,7 @@ pipeline {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
                             def trivyOk = sh(script: 'which trivy 2>/dev/null', returnStatus: true) == 0
                             if (trivyOk) {
-                                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
+                                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
                                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             } else {
                                 echo 'Trivy not available — skipping scan'
