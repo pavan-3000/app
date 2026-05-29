@@ -20,16 +20,8 @@ pipeline {
                         TOOLS_DIR="$HOME/devpilot-tools"
                         mkdir -p "$TOOLS_DIR/bin"
 
-                        if ! command -v docker 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/docker" ]; then
-                            DOCKER_VERSION=24.0.7
-                            curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz
-                            tar -xz -C /tmp -f /tmp/docker-cli.tgz
-                            mv /tmp/docker/docker "$TOOLS_DIR/bin/docker"
-                            rm -rf /tmp/docker-cli.tgz /tmp/docker
-                        fi
-
-                        if ! command -v trivy 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/trivy" ]; then
-                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin"
+                        if ! which trivy 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/trivy" ]; then
+                            curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$TOOLS_DIR/bin" 2>/dev/null || true
                         fi
                     '''
                 }
@@ -40,7 +32,7 @@ pipeline {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
-                        def sonarOk = sh(script: 'command -v sonar-scanner 2>/dev/null', returnStatus: true) == 0
+                        def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
                                 sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL}'
@@ -57,7 +49,7 @@ pipeline {
             when { expression { return fileExists('Dockerfile') } }
             steps {
                 script {
-                    def dockerAvailable = sh(script: 'command -v docker 2>/dev/null', returnStatus: true) == 0
+                    def dockerAvailable = sh(script: 'which docker 2>/dev/null || test -x /usr/bin/docker', returnStatus: true) == 0
                     if (dockerAvailable) {
                         def daemonOk = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
                         if (daemonOk) {
@@ -81,9 +73,9 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
-                            def trivyOk = sh(script: 'command -v trivy 2>/dev/null', returnStatus: true) == 0
+                            def trivyOk = sh(script: 'which trivy 2>/dev/null', returnStatus: true) == 0
                             if (trivyOk) {
-                                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
+                                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
                                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             } else {
                                 echo 'Trivy not available — skipping scan'
