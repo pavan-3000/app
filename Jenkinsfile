@@ -40,10 +40,10 @@ pipeline {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
-                        def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
+                        def sonarOk = sh(script: 'which sonar-scanner', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
-                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=java'
+                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL}'
                             }
                         } else {
                             echo 'sonar-scanner not found — configure SonarQube Scanner in Jenkins → Manage Jenkins → Tools'
@@ -59,7 +59,7 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
-                            def dockerAvailable = sh(script: 'which docker 2>/dev/null', returnStatus: true) == 0
+                            def dockerAvailable = sh(script: 'which docker', returnStatus: true) == 0
                             if (dockerAvailable) {
                                 def daemonOk = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
                                 if (daemonOk) {
@@ -85,7 +85,7 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
                     script {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
-                            def trivyOk = sh(script: 'which trivy 2>/dev/null', returnStatus: true) == 0
+                            def trivyOk = sh(script: 'which trivy', returnStatus: true) == 0
                             if (trivyOk) {
                                 sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
                                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
