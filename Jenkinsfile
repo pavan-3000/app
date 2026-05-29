@@ -43,7 +43,7 @@ pipeline {
                         def sonarOk = sh(script: 'which sonar-scanner 2>/dev/null', returnStatus: true) == 0
                         if (sonarOk) {
                             withSonarQubeEnv('SonarQube') {
-                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=java'
+                                sh 'sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.sources=. -Dsonar.host.url=${SONAR_HOST_URL} -Dsonar.language=auto'
                             }
                         } else {
                             echo 'sonar-scanner not found — configure SonarQube Scanner in Jenkins → Manage Jenkins → Tools'
