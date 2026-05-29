@@ -23,7 +23,7 @@ pipeline {
                         if ! command -v docker 2>/dev/null && [ ! -x "$TOOLS_DIR/bin/docker" ]; then
                             DOCKER_VERSION=24.0.7
                             curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" -o /tmp/docker-cli.tgz
-                            tar -xz -C /tmp -f /tmp/docker-cli.tgz 
+                            tar -xz -C /tmp -f /tmp/docker-cli.tgz
                             mv /tmp/docker/docker "$TOOLS_DIR/bin/docker"
                             rm -rf /tmp/docker-cli.tgz /tmp/docker
                         fi
@@ -57,21 +57,19 @@ pipeline {
             when { expression { return fileExists('Dockerfile') } }
             steps {
                 script {
-                    withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
-                        def dockerAvailable = sh(script: 'command -v docker 2>/dev/null', returnStatus: true) == 0
-                        if (dockerAvailable) {
-                            def daemonOk = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
-                            if (daemonOk) {
-                                retry(2) {
-                                    sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                                }
-                                sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
-                            } else {
-                                echo 'Docker CLI found but daemon not reachable — mount the socket: docker run -v /var/run/docker.sock:/var/run/docker.sock'
+                    def dockerAvailable = sh(script: 'command -v docker 2>/dev/null', returnStatus: true) == 0
+                    if (dockerAvailable) {
+                        def daemonOk = sh(script: 'docker info > /dev/null 2>&1', returnStatus: true) == 0
+                        if (daemonOk) {
+                            retry(2) {
+                                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
                             }
+                            sh "docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest"
                         } else {
-                            echo 'Docker not available — Setup Tools stage may have failed to download it'
+                            echo 'Docker daemon not reachable — run: docker exec jenkins chmod 666 /var/run/docker.sock'
                         }
+                    } else {
+                        echo 'Docker not available — install Docker in the Jenkins image or mount the socket'
                     }
                 }
             }
@@ -85,7 +83,7 @@ pipeline {
                         withEnv(["PATH+DEVPILOT=${env.HOME}/devpilot-tools/bin"]) {
                             def trivyOk = sh(script: 'command -v trivy 2>/dev/null', returnStatus: true) == 0
                             if (trivyOk) {
-                                sh "trivy image --exit-code 0 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
+                                sh "trivy image --exit-code 1 --severity HIGH,CRITICAL --format table ${DOCKER_IMAGE}:${DOCKER_TAG} | tee trivy-report.txt"
                                 archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
                             } else {
                                 echo 'Trivy not available — skipping scan'
