@@ -18,7 +18,7 @@ COPY --from=builder /app/package-lock.json ./
 
 RUN npm install --production
 
-RUN addgroup app && adduser -S app -G app
+RUN addgroup -S app && adduser -S app -G app
 USER app
 
 EXPOSE 3000
